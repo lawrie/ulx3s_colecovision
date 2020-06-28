@@ -178,6 +178,7 @@ class osd:
         self.spi_request.irq(trigger=Pin.IRQ_FALLING, handler=self.irq_handler_ref)
         self.irq_handler(0) # handle stuck IRQ
       if filename.endswith(".nes") \
+      or filename.endswith(".col") \
       or filename.endswith(".snes") \
       or filename.endswith(".smc") \
       or filename.endswith(".sfc"):
@@ -185,7 +186,15 @@ class osd:
         s=ld_nes.ld_nes(self.spi,self.cs)
         s.ctrl(1)
         s.ctrl(0)
-        s.load_stream(open(filename,"rb"),addr=0,maxlen=0x101000)
+        s.load_stream(open(filename,"rb"))
+        del s
+        gc.collect()
+        self.enable[0]=0
+        self.osd_enable(0)
+      if filename.startswith("/sd/ti99_4a/") and filename.endswith(".bin"):
+        import ld_ti99_4a
+        s=ld_ti99_4a.ld_ti99_4a(self.spi,self.cs)
+        s.load_rom_auto(open(filename,"rb"),filename)
         del s
         gc.collect()
         self.enable[0]=0
@@ -358,7 +367,11 @@ class osd:
   #    self.spi.write(bytearray(a)) # write content
   #    self.cs.off()
 
-os.mount(SDCard(slot=3),"/sd")
-ecp5.prog("/sd/msx/bitstreams/ulx3s_85f_msx1.bit")
+bitstream="/sd/colecovision/bitstreams/ulx3s_85f_colecovision.bit"
+try:
+  os.mount(SDCard(slot=3),"/sd")
+  ecp5.prog(bitstream)
+except:
+  print(bitstream+" file not found")
 gc.collect()
 run=osd()
