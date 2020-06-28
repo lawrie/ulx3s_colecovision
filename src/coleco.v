@@ -446,7 +446,7 @@ module coleco
 
   assign cpuDataIn =  cpuAddress[7:0] == 8'h98 && n_ioRD == 1'b0 ? vga_dout :
                       cpuAddress[7:0] == 8'h99 && n_ioRD == 1'b0 ? status :
-                      ramOut;
+                      cpuAddress[15] && n_memRD == 1'b0          ? romOut : ramOut;
 
   always @(posedge cpuClock) begin
     if (!n_hard_reset) begin
