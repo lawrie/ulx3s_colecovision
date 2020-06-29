@@ -192,8 +192,6 @@ module coleco
     end
   end
 
-  wire [1:0] soft_sw = {1'b1, R_cpu_control[4]}; // for 32K ROM support
-
   // ===============================================================
   // Reset generation
   // ===============================================================
@@ -214,13 +212,15 @@ module coleco
   always @(posedge cpuClock)
     n_hard_reset <= pwr_up_reset_n & btn[0] & ~R_cpu_control[0];
 
+  wire [3:0] extra_keys;
+
   tv80n cpu1 (
     .reset_n(n_hard_reset),
     //.clk(cpuClock), // turbo mode 28MHz
     .clk(cpuClockEnable), // normal mode 3.5MHz
-    .wait_n(1'b1),
-    .int_n(n_int),
-    .nmi_n(1'b1),
+    .wait_n(!extra_keys[0]),
+    .int_n(1'b1),
+    .nmi_n(n_int),
     .busrq_n(1'b1),
     .mreq_n(n_MREQ),
     .m1_n(n_M1),
@@ -241,7 +241,6 @@ module coleco
   )
   ram32 (
     .clk(cpuClock),
-    // Slot 0 only
     .we(cpuAddress[15:13] == 3 && !n_memWR),
     .addr(cpuAddress),
     .din(cpuDataOut),
@@ -276,7 +275,7 @@ module coleco
    .we_out(sdram_d_wr),
    // cpu/chipset interface
    .weA(0),
-   .addrA({cpuAddress[15:14]- (soft_sw[0] ? 2'b01 : 2'b10), cpuAddress[13:0]}),
+   .addrA(cpuAddress[14:0]),
    .oeA(cpuClockEnable),
    .dinA(0),
    .doutA(romOut),
@@ -293,7 +292,7 @@ module coleco
     .we_b(spi_ram_wr && spi_ram_addr[31:24] == 8'h00), // used by OSD
     .addr_b(spi_ram_addr[14:0]),
     .din_b(spi_ram_di),
-    .addr(cpuAddress - 15'h4000),
+    .addr(cpuAddress[14:0]),
     .dout(romOut)
   );
   endgenerate
@@ -301,6 +300,23 @@ module coleco
   // ===============================================================
   // Keyboard
   // ===============================================================
+  wire [10:0] ps2_key;
+
+    // Get PS/2 keyboard events
+  ps2 ps2_kbd (
+    .clk(cpuClock),
+    .ps2_clk(ps2Clk),
+    .ps2_data(ps2Data),
+    .ps2_key(ps2_key)
+  );
+
+  keypad pad (
+    .clk(cpuClock),
+    .reset(!n_hard_reset),
+    .ps2_key(ps2_key),
+    .key(key),
+    .extra_keys(extra_keys)
+  );
 
   // ===============================================================
   // VGA
@@ -326,9 +342,13 @@ module coleco
   wire        sprite_collision;
   wire        too_many_sprites;
   wire        interrupt_flag;
+  reg         keypad;
+  reg [3:0]   key;
 
   always @(posedge cpuClock) begin
     if (cpuClockEdge) begin
+      if (cpuAddress[7:0] == 8'h80 && n_ioWR == 1'b0) keypad <= 1;
+      if (cpuAddress[7:0] == 8'hC0 && n_ioWR == 1'b0) keypad <= 0;
       if (cpuAddress[7:0] == 8'hff && n_ioWR == 1'b0) r_psg <= cpuDataOut[3:0];
       // VDP interface
       if (vga_wr) vga_addr <= vga_addr + 1;
@@ -443,12 +463,14 @@ module coleco
   reg  r_interrupt_flag, r_sprite_collision;
   reg  r_status_read;
   wire [7:0] status = {r_interrupt_flag, too_many_sprites, r_sprite_collision, (too_many_sprites ? sprite5 : 5'b11111)};
+  wire [7:0] key_data = {1'b0, ~btn[0], 2'b0, ~key};
+  wire [7:0] joy_data = {1'b0, ~btn[1], 2'b0, ~{btn[5], btn[4], btn[6], btn[3]}};
 
-  assign cpuDataIn =  cpuAddress[7:0] == 8'h98 && n_ioRD == 1'b0 ? vga_dout :
-                      cpuAddress[7:0] == 8'h99 && n_ioRD == 1'b0 ? status :
+  assign cpuDataIn =  cpuAddress[7:0] == 8'hbe && n_ioRD == 1'b0 ? vga_dout :
+                      cpuAddress[7:0] == 8'hbf && n_ioRD == 1'b0 ? status :
 		      // Controllers 0 and 1
-		      cpuAddress[7:0] == 8'hfc && n_ioRD == 1'b0 ? ~btn[6:1] :
-		      cpuAddress[7:0] == 8'hff && n_ioRD == 1'b0 ? ~btn[6:1] :
+		      cpuAddress[7:0] == 8'hfc && n_ioRD == 1'b0 ? (keypad ? key_data : joy_data) :
+		      cpuAddress[7:0] == 8'hff && n_ioRD == 1'b0 ? (keypad ? key_data : joy_data) :
                       cpuAddress[15] && n_memRD == 1'b0          ? romOut : ramOut;
 
   always @(posedge cpuClock) begin
@@ -459,8 +481,8 @@ module coleco
       if (interrupt_flag) r_interrupt_flag <= 1;
       if (sprite_collision) r_sprite_collision <= 1;
       if (cpuClockEdge) begin
-        r_status_read <= cpuAddress[7:0] == 8'h99 && n_ioRD == 1'b0;
-        if (r_status_read && !(cpuAddress[7:0] == 8'h99 && n_ioRD == 1'b0)) begin
+        r_status_read <= cpuAddress[7:0] == 8'hbf && n_ioRD == 1'b0;
+        if (r_status_read && !(cpuAddress[7:0] == 8'hbf && n_ioRD == 1'b0)) begin
           r_interrupt_flag <= 0;
           r_sprite_collision <= 0;
         end
@@ -491,7 +513,7 @@ module coleco
   // ===============================================================
   // Leds
   // ===============================================================
-  assign leds = {!n_hard_reset, mode};
+  assign leds = {extra_keys, !n_hard_reset, keypad, mode};
 
   always @(posedge cpuClock) diag16 <= pc;
 
