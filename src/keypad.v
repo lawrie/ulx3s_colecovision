@@ -23,14 +23,14 @@ always @(posedge clk) begin
         8'h26, 8'h7a: keys[3]  <= pressed; // 3
         8'h46, 8'h7d: keys[4]  <= pressed; // 9
         8'h45, 8'h70: keys[5]  <= pressed; // 0
-        8'h7c:        keys[6]  <= pressed; // *
+        8'h4e, 8'h7b: keys[6]  <= pressed; // - for *
         8'h1e, 8'h72: keys[8]  <= pressed; // 2
-        8'h5d:        keys[9]  <= pressed; // # or \
+        8'h55:        keys[9]  <= pressed; // = for #
         8'h3d, 8'h6c: keys[10] <= pressed; // 7
         8'h2e, 8'h73: keys[12] <= pressed; // 5
         8'h25, 8'h6b: keys[13] <= pressed; // 4
         8'h3e, 8'h75: keys[14] <= pressed; // 8
-	8'h77:  extra_keys[0]  <= pressed; // Num lock
+	8'h77:  extra_keys[0]  <= pressed; // Num lock for pause cpu
       endcase
     end      
   end
