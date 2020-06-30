@@ -213,6 +213,7 @@ module coleco
     n_hard_reset <= pwr_up_reset_n & btn[0] & ~R_cpu_control[0];
 
   wire [3:0] extra_keys;
+  wire sound_ready;
 
   tv80n cpu1 (
     .reset_n(n_hard_reset),
@@ -507,8 +508,22 @@ module coleco
   // ===============================================================
   // Audio
   // ===============================================================
-  assign audio_l = 0;
+  wire [3:0] sound_ao;
+
+  assign audio_l = sound_ao;
   assign audio_r = audio_l;
+
+  sn76489 #(4) audio (
+    .clk(cpuClock),
+    .clk_en(cpuClockEnable),
+    .reset(!n_hard_reset),
+    .ce_n(1'b0),
+    .we_n(!(cpuAddress[7:0] == 8'hff && n_ioWR == 1'b0)),
+    .ready(sound_ready),
+    .d(cpuDataOut),
+    .audio_out(sound_ao)
+);
+
 
   // ===============================================================
   // Leds
