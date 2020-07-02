@@ -1,7 +1,9 @@
 `default_nettype none
 module coleco
 #(
-  parameter c_sdram       = 1 // 1:SDRAM, 0:BRAM 32K
+  parameter c_sdram       = 1, // 1:SDRAM, 0:BRAM 32K
+  parameter c_vga_out     = 0, // 0; Just HDMI, 1: VGA and HDMI
+  parameter c_diag        = 1  // 0: No led diagnostcs, 1: led diagnostics 
 )
 (
   input         clk25_mhz,
@@ -48,8 +50,16 @@ module coleco
   output [7:0]  leds
 );
 
-  parameter c_vga_out = 0;
-  parameter c_diag = 1;
+  // Port numbers
+  wire [7:0] vdp_ctrl_port = 8'hbf;
+  wire [7:0] vdp_data_port = 8'hbe;
+
+  wire [7:0] psg_write_port = 8'hff;
+
+  wire [7:0] ctrl_0_port = 8'hfc;
+  wire [7:0] ctrl_1_port = 8'hff;
+  wire [7:0] keypad_sel_port = 8'h80;
+  wire [7:0] joystick_sel_port = 8'hc0;
 
   // pull-ups for us2 connector 
   assign usb_fpga_pu_dp = 1;
@@ -106,7 +116,6 @@ module coleco
   wire          n_MREQ;
   wire          n_IORQ;
   wire          n_M1;
-  wire          n_kbdCS;
   wire          n_int;
 
   reg [3:0]     cpuClockCount;
@@ -325,8 +334,8 @@ module coleco
   wire        vga_de;
   wire [7:0]  vga_dout;
   reg  [13:0] vga_addr;
-  wire        vga_wr = cpuAddress[7:0] == 8'hbe && n_ioWR == 1'b0;
-  wire        vga_rd = cpuAddress[7:0] == 8'hbe && n_ioRD == 1'b0;
+  wire        vga_wr = cpuAddress[7:0] == vdp_data_port && n_ioWR == 1'b0;
+  wire        vga_rd = cpuAddress[7:0] == vdp_data_port && n_ioRD == 1'b0;
   reg         is_second_addr_byte = 0;
   reg [7:0]   first_addr_byte;
   reg [7:0]   r_vdp [0:7];
@@ -338,7 +347,6 @@ module coleco
   wire [13:0] sprite_pattern_table_addr = r_vdp[6] * 2048;
   wire [7:0]  vga_diag;
   reg         r_vga_rd;
-  reg [3:0]   r_psg;
   wire [4:0]  sprite5;
   wire        sprite_collision;
   wire        too_many_sprites;
@@ -348,28 +356,23 @@ module coleco
 
   always @(posedge cpuClock) begin
     if (cpuClockEdge) begin
-      if (cpuAddress[7:0] == 8'h80 && n_ioWR == 1'b0) keypad <= 1;
-      if (cpuAddress[7:0] == 8'hC0 && n_ioWR == 1'b0) keypad <= 0;
-      if (cpuAddress[7:0] == 8'hff && n_ioWR == 1'b0) r_psg <= cpuDataOut[3:0];
+      if (cpuAddress[7:0] == keypad_sel_port && n_ioWR == 1'b0) keypad <= 1;
+      if (cpuAddress[7:0] == joystick_sel_port && n_ioWR == 1'b0) keypad <= 0;
       // VDP interface
       if (vga_wr) vga_addr <= vga_addr + 1;
       // Increment address on CPU cycle after IO read
       r_vga_rd <= vga_rd;
       if (r_vga_rd && !vga_rd) vga_addr <= vga_addr + 1;
 
-      if (cpuAddress[7:0] == 8'hbf && n_ioWR == 1'b0) begin
+      if (cpuAddress[7:0] == vdp_ctrl_port && n_ioWR == 1'b0) begin
         is_second_addr_byte <= ~is_second_addr_byte;
-        if (is_second_addr_byte) begin
-          if (!cpuDataOut[7]) begin
+	if (is_second_addr_byte) begin
+          if (!cpuDataOut[7]) 
             vga_addr <=  {cpuDataOut[5:0], first_addr_byte};
-          end else begin
-            if (cpuDataOut[5:0] < 8) begin
-              r_vdp[cpuDataOut[5:0]] <= first_addr_byte;
-            end
-          end
-        end else begin
+          else if (cpuDataOut[5:0] < 8)
+            r_vdp[cpuDataOut[5:0]] <= first_addr_byte;
+        end else
           first_addr_byte <= cpuDataOut;
-        end
       end
     end
   end
@@ -467,11 +470,11 @@ module coleco
   wire [7:0] key_data = {1'b0, ~btn[0], 2'b0, ~key};
   wire [7:0] joy_data = {1'b0, ~btn[1], 2'b0, ~{btn[5], btn[4], btn[6], btn[3]}};
 
-  assign cpuDataIn =  cpuAddress[7:0] == 8'hbe && n_ioRD == 1'b0 ? vga_dout :
-                      cpuAddress[7:0] == 8'hbf && n_ioRD == 1'b0 ? status :
+  assign cpuDataIn =  cpuAddress[7:0] == vdp_data_port && n_ioRD == 1'b0 ? vga_dout :
+                      cpuAddress[7:0] == vdp_ctrl_port && n_ioRD == 1'b0 ? status :
 		      // Controllers 0 and 1
-		      cpuAddress[7:0] == 8'hfc && n_ioRD == 1'b0 ? (keypad ? key_data : joy_data) :
-		      cpuAddress[7:0] == 8'hff && n_ioRD == 1'b0 ? (keypad ? key_data : joy_data) :
+		      cpuAddress[7:0] == ctrl_0_port && n_ioRD == 1'b0 ? (keypad ? key_data : joy_data) :
+		      cpuAddress[7:0] == ctrl_1_port && n_ioRD == 1'b0 ? (keypad ? key_data : joy_data) :
                       cpuAddress[15] && n_memRD == 1'b0          ? romOut : ramOut;
 
   always @(posedge cpuClock) begin
@@ -482,8 +485,8 @@ module coleco
       if (interrupt_flag) r_interrupt_flag <= 1;
       if (sprite_collision) r_sprite_collision <= 1;
       if (cpuClockEdge) begin
-        r_status_read <= cpuAddress[7:0] == 8'hbf && n_ioRD == 1'b0;
-        if (r_status_read && !(cpuAddress[7:0] == 8'hbf && n_ioRD == 1'b0)) begin
+        r_status_read <= cpuAddress[7:0] == vdp_ctrl_port && n_ioRD == 1'b0;
+        if (r_status_read && !(cpuAddress[7:0] == vdp_ctrl_port && n_ioRD == 1'b0)) begin
           r_interrupt_flag <= 0;
           r_sprite_collision <= 0;
         end
@@ -518,12 +521,11 @@ module coleco
     .clk_en(cpuClockEnable),
     .reset(!n_hard_reset),
     .ce_n(1'b0),
-    .we_n(!(cpuAddress[7:0] == 8'hff && n_ioWR == 1'b0)),
+    .we_n(!(cpuAddress[7:0] == psg_write_port && n_ioWR == 1'b0)),
     .ready(sound_ready),
     .d(cpuDataOut),
     .audio_out(sound_ao)
 );
-
 
   // ===============================================================
   // Leds
