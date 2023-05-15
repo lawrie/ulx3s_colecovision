@@ -6,7 +6,8 @@ VERILOG = ../src/coleco.v ../src/ram.v ../src/vram.v ../src/rom.v ../src/gamerom
 	  ../src/lattice/ecp5pll.sv \
 	  ../src/sdram.v \
 	  ../src/osd/osd.v ../src/osd/spi_osd.v \
-	  ../src/osd/spi_ram_btn.v ../src/osd/spirw_slave_v.v
+	  ../src/osd/spi_ram_btn.v ../src/osd/spirw_slave_v.v \
+	  ../src/dac.v
 
 PIN_DEF = ulx3s_v20.lpf
 

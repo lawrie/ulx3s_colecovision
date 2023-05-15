@@ -6,7 +6,8 @@ VERILOG = ../src/ulx4m_coleco.v ../src/ram.v ../src/vram.v ../src/rom.v ../src/g
 	  ../src/lattice/ecp5pll.sv \
 	  ../src/sdram.v \
 	  ../src/osd/osd.v ../src/osd/spi_osd.v \
-	  ../src/osd/spi_ram_btn.v ../src/osd/spirw_slave_v.v
+	  ../src/osd/spi_ram_btn.v ../src/osd/spirw_slave_v.v \
+	  ../src/dac.v
 
 PIN_DEF = ulx4m_v002.lpf
 TOP = coleco
