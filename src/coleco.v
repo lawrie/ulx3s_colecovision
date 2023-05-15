@@ -511,12 +511,22 @@ module coleco
   // ===============================================================
   // Audio
   // ===============================================================
-  wire [3:0] sound_ao;
+  wire [15:0] sound_16;
+  wire audio_pulse;
 
-  assign audio_l = sound_ao;
+  dac #(
+    .WIDTH(16)
+  ) dac(
+    .rst_n(n_hard_reset),
+    .clk(cpuClock),
+    .value(sound_16),
+    .pulse(audio_pulse)
+  );
+
+  assign audio_l = {audio_pulse, 3'd0};
   assign audio_r = audio_l;
 
-  sn76489 #(4) audio (
+  sn76489 audio (
     .clk(cpuClock),
     .clk_en(cpuClockEnable),
     .reset(!n_hard_reset),
@@ -524,7 +534,7 @@ module coleco
     .we_n(!(cpuAddress[7:0] == psg_write_port && n_ioWR == 1'b0)),
     .ready(sound_ready),
     .d(cpuDataOut),
-    .audio_out(sound_ao)
+    .audio_out(sound_16)
 );
 
   // ===============================================================
