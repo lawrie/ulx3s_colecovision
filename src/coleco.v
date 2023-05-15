@@ -467,7 +467,7 @@ module coleco
   reg  r_interrupt_flag, r_sprite_collision;
   reg  r_status_read;
   wire [7:0] status = {r_interrupt_flag, too_many_sprites, r_sprite_collision, (too_many_sprites ? sprite5 : 5'b11111)};
-  wire [7:0] key_data = {1'b0, ~btn[0], 2'b0, ~key};
+  wire [7:0] key_data = {1'b0, ~btn[2], 2'b0, ~key};
   wire [7:0] joy_data = {1'b0, ~btn[1], 2'b0, ~{btn[5], btn[4], btn[6], btn[3]}};
 
   assign cpuDataIn =  cpuAddress[7:0] == vdp_data_port && n_ioRD == 1'b0 ? vga_dout :
